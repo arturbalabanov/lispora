@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "mpc.h"
+#include "../lib/mpc/mpc.h"
 
 #ifdef _WIN32
 
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
 		",
 		Number, Operator, Expression, Program);
 
-	puts("Lispora version beta 0.0.0.0.0.0.1");
+	puts("Lispora version 0.0.0.0.0.0.1");
 	puts("Press Ctrl-C for exit.");
 
 	while (1) {
