@@ -25,3 +25,4 @@ tasks.todo
 bin
 .ycm_extra_conf.py
 .ropeproject
+.ycm_extra_conf.pyc
