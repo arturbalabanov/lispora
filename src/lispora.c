@@ -43,7 +43,47 @@ typedef struct lval {
 	struct lval** cell;
 } lval;
 
+lval* lval_num(long num);
+
+lval* lval_err(char* err);
+
+lval* lval_sym(char* sym);
+
+lval* lval_sexpr(void);
+
+lval* lval_qexpr(void);
+
+void lval_del(lval* v);
+
+lval* lval_add(lval* v, lval* x);
+
+lval* lval_read_num(mpc_ast_t* tree);
+
+lval* lval_read(mpc_ast_t* tree);
+
+void lval_expr_print(lval* v, char open, char close);
+
 void lval_print(lval* v);
+
+void lval_println(lval* v);
+
+lval* lval_pop(lval* v, int i);
+
+lval* lval_take(lval* v, int i);
+
+lval* lval_eval_sexpr(lval* v);
+
+lval* builtin_head(lval* args);
+
+lval* builtin_tail(lval* args);
+
+lval* builtin_list(lval* args);
+
+lval* builtin_eval(lval* args);
+
+lval* lval_join(lval* first, lval* second);
+
+lval* builtin_join(lval* v);
 
 lval* builtin_op(lval* args, char* op);
 
