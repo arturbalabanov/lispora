@@ -26,6 +26,8 @@ void add_history(char* unused) {};
 
 #endif
 
+#define LASSERT(args, cond, err) if (!cond) { lval_del(args); return lval_err(err); }
+
 // Types of lval
 enum { LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR };
 
@@ -43,7 +45,9 @@ typedef struct lval {
 
 void lval_print(lval* v);
 
-lval* buildin_op(lval* args, char* op);
+lval* builtin_op(lval* args, char* op);
+
+lval* builtin(lval* args, char* sym);
 
 lval* lval_eval(lval* v);
 
@@ -238,12 +242,72 @@ lval* lval_eval_sexpr(lval* v) {
 		return lval_err("S-expression does not start with symbol.");
 	}
 
-	lval* result = buildin_op(v, first->sym);
+	lval* result = builtin(v, first->sym);
 	lval_del(first);
 	return result;
 }
 
-lval* buildin_op(lval* args, char* op) {
+lval* builtin_head(lval* args) {
+	LASSERT(args, args->count == 1, "Invalid arguments number.");
+	LASSERT(args, args->cell[1] == LVAL_QEXPR, "The argument must be a Q-Expression.");
+	LASSERT(args, args->cell[0]->count != 0, "Invalid argument: passed empty Q-Expression.");
+
+	lval* head = lval_take(args, 0);
+	while(head->count > 1) {
+		lval_del(lval_pop(head, 1));
+	}
+
+	return head;
+}
+
+lval* builtin_tail(lval* args) {
+	LASSERT(args, args->count == 1, "Invalid arguments number");
+	LASSERT(args, args->cell[1] == LVAL_QEXPR, "The argument must be a Q-Expression.");
+	LASSERT(args, args->cell[0]->count != 0, "Invalid argument: passed empty Q-Expression.");
+
+	lval* tail = lval_take(args, 0);
+	lval_del(lval_pop(tail, 0));
+	return tail;
+}
+
+lval* builtin_list(lval* args) {
+	args->type = LVAL_QEXPR;
+	return args;
+}
+
+lval* builtin_eval(lval* args) {
+	LASSERT(args, args->count == 1, "Invalid arguments number");
+	LASSERT(args, args->cell[1] == LVAL_QEXPR, "The argument must be a Q-Expression.");
+
+	lval* x = lval_take(args, 0);
+	x->type = LVAL_SEXPR;
+	return lval_eval(x);
+}
+
+lval* lval_join(lval* first, lval* second) {
+	while (second->count) {
+		first = lval_add(first, lval_pop(second, 0));
+	}
+
+	lval_del(second);
+	return first;
+}
+
+lval* builtin_join(lval* v) {
+	for (int i = 0; i < v->count; ++i) {
+		LASSERT(v, v->cell[i]->type == LVAL_QEXPR, "All the arguments must be Q-Expressions.");
+	}
+
+	lval* res = lval_pop(v, 0);
+	while(v->count) {
+		res = lval_join(res, lval_pop(v, 0));
+	}
+
+	lval_del(v);
+	return res;
+}
+
+lval* builtin_op(lval* args, char* op) {
 	for (int i = 0; i < args->count; ++i) {
 		if (args->cell[i]->type != LVAL_NUM) {
 			lval_del(args);
@@ -283,6 +347,25 @@ lval* buildin_op(lval* args, char* op) {
 	return first;
 }
 
+lval* builtin(lval* args, char* sym) {
+	if (!strcmp("list", sym)) {
+		return builtin_list(args);
+	} else if (!strcmp("head", sym)) {
+		return builtin_head(args);
+	} else if (!strcmp("tail", sym)) {
+		return builtin_tail(args);
+	} else if (!strcmp("eval", sym)) {
+		return builtin_eval(args);
+	} else if (!strcmp("join", sym)) {
+		return builtin_join(args);
+	} else if (strstr("+-*/", sym)) {
+		return builtin_op(args, sym);
+	}
+
+	lval_del(args);
+	return lval_err("Unknown symbol.");
+}
+
 lval* lval_eval(lval* v) {
 	if (v->type == LVAL_SEXPR) {
 		return lval_eval_sexpr(v);
@@ -302,7 +385,7 @@ int main(int argc, char *argv[]) {
 	mpca_lang(MPCA_LANG_DEFAULT,
 		"                                                             \
 			number  : /-?[0-9]+/ ;                                    \
-			symbol  : '+' | '-' | '*' | '/' ;                         \
+			symbol  : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | '+' | '-' | '*' | '/' ; \
 			sexpr   : '(' <expr>* ')' ;                               \
 			qexpr   : '{' <expr>* '}' ;                               \
 			expr    : <number> | <symbol> | <sexpr> | <qexpr> ;       \
@@ -310,7 +393,7 @@ int main(int argc, char *argv[]) {
 		",
 		Number, Symbol, Sexpr, Qexpr, Expr, Program);
 
-	puts("Lispora version 0.0.0.1");
+	puts("Lispora version 0.0.0.1.3");
 	puts("Press Ctrl-C for exit.");
 
 	while (1) {
