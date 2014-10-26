@@ -112,6 +112,8 @@ lval* builtin_op(lenv* e, lval* args, char* op);
 
 lval* builtin_join(lenv* e, lval* v);
 
+lval* builtin_def(lenv* e, lval* v);
+
 lval* builtin_add(lenv* e, lval* args);
 
 lval* builtin_sub(lenv* e, lval* args);
@@ -472,6 +474,28 @@ lval* builtin_join(lenv* e, lval* v) {
 	return res;
 }
 
+lval* builtin_def(lenv* e, lval* args) {
+	LASSERT(args, (args->cell[0]->type == LVAL_QEXPR),
+			"First argument must be a Q-Expression.");
+
+	lval* syms = args->cell[0];
+
+	for (int i = 0; i < syms->count; ++i) {
+		LASSERT(args, (syms->cell[i]->type == LVAL_SYM),
+				"Function 'def' cannot define non-symbols.");
+	}
+
+	LASSERT(args, (syms->count == args->count - 1),
+			"Number of the values must be the same as the number of symbols.");
+
+	for (int i = 0; i < syms->count; ++i) {
+		lenv_put(e, syms->cell[i], args->cell[i+1]);
+	}
+
+	lval_del(args);
+	return lval_sexpr();
+}
+
 lval* builtin_op(lenv* e, lval* args, char* op) {
 	for (int i = 0; i < args->count; ++i) {
 		if (args->cell[i]->type != LVAL_NUM) {
@@ -551,6 +575,9 @@ void lenv_add_builtins(lenv* e) {
 	lenv_add_builtin(e, "-", builtin_sub);
 	lenv_add_builtin(e, "*", builtin_mul);
 	lenv_add_builtin(e, "/", builtin_div);
+
+	/* Other */
+	lenv_add_builtin(e, "def", builtin_def);
 }
 
 lval* lval_eval(lenv* e, lval* v) {
