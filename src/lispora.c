@@ -58,7 +58,7 @@ struct lenv {
 
 lval* lval_num(long num);
 
-lval* lval_err(char* err);
+lval* lval_err(char* fmt, ...);
 
 lval* lval_sym(char* sym);
 
@@ -133,11 +133,19 @@ lval* lval_num(long num) {
 	return v;
 }
 
-lval* lval_err(char* err) {
+lval* lval_err(char* fmt, ...) {
 	lval* v = malloc(sizeof(lval));
 	v->type = LVAL_ERR;
-	v->err = malloc(strlen(err) + 1);
-	strcpy(v->err, err);
+
+	va_list va;
+	va_start(va, fmt);
+
+	v->err = malloc(512);
+	vsnprintf(v->err, 512 - 1, fmt, va);
+	v->err = realloc(v->err, strlen(v->err)+1);
+
+	va_end(va);
+
 	return v;
 }
 
@@ -393,7 +401,7 @@ lval* lenv_get(lenv* e, lval* key) {
 		}
 	}
 
-	return lval_err("Unbound symbol.");
+	return lval_err("Unbound symbol: '%s'", key->sym);
 }
 
 void lenv_put(lenv* e, lval* key, lval* v) {
