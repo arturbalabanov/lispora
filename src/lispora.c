@@ -26,7 +26,27 @@ void add_history(char* unused) {};
 
 #endif
 
-#define LASSERT(args, cond, err) if (!cond) { lval_del(args); return lval_err(err); }
+#define LASSERT(args, cond, fmt, ...) \
+	if (!(cond)) { \
+		lval* err = lval_err(fmt, ##__VA_ARGS__); \
+		lval_del(args); \
+		return err; \
+	}
+
+#define LASSERT_TYPE(func, args, index, expect) \
+	LASSERT(args, args->cell[index]->type == expect, \
+			"Function '%s' passed incorrect type of argument %i. Got %s, expected %s.", \
+			func, index, ltype_name(args->cell[index]->type), ltype_name(expect))
+
+#define LASSERT_NUM_ARGS(func, args, num) \
+	LASSERT(args, args->count == num, \
+			"Function '%s' passed incorrect number of arguments. Got %i, expected %i.", \
+			func, args->count, num)
+
+#define LASSERT_NOT_EMPTY(func, args, index) \
+	LASSERT(args, args->cell[index]->count != 0, \
+			"Function '%s' passed {} for argument %i.", \
+			func, index)
 
 struct lval;
 struct lenv;
@@ -55,6 +75,8 @@ struct lenv {
 	char** syms;
 	lval** vals;
 };
+
+char* ltype_name(int t);
 
 lval* lval_num(long num);
 
@@ -125,6 +147,18 @@ lval* builtin_div(lenv* e, lval* args);
 lval* builtin(lval* args, char* sym);
 
 lval* lval_eval(lenv* e, lval* v);
+
+char* ltype_name(int t) {
+	switch(t) {
+		case LVAL_FUN: return "Function";
+		case LVAL_NUM: return "Number";
+		case LVAL_ERR: return "Error";
+		case LVAL_SYM: return "Symbol";
+		case LVAL_SEXPR: return "S-Expression";
+		case LVAL_QEXPR: return "Q-Expression";
+		default: return "Unknown";
+	}
+}
 
 lval* lval_num(long num) {
 	lval* v = malloc(sizeof(lval));
@@ -423,9 +457,9 @@ void lenv_put(lenv* e, lval* key, lval* v) {
 }
 
 lval* builtin_head(lenv* e, lval* args) {
-	LASSERT(args, args->count == 1, "Invalid arguments number.");
-	LASSERT(args, args->cell[1] == LVAL_QEXPR, "The argument must be a Q-Expression.");
-	LASSERT(args, args->cell[0]->count != 0, "Invalid argument: passed empty Q-Expression.");
+	LASSERT_NUM_ARGS("head", args, 1);
+	LASSERT_TYPE("head", args, 0, LVAL_QEXPR);
+	LASSERT_NOT_EMPTY("head", args, 0);
 
 	lval* head = lval_take(args, 0);
 	while(head->count > 1) {
@@ -436,9 +470,9 @@ lval* builtin_head(lenv* e, lval* args) {
 }
 
 lval* builtin_tail(lenv* e, lval* args) {
-	LASSERT(args, args->count == 1, "Invalid arguments number");
-	LASSERT(args, args->cell[1] == LVAL_QEXPR, "The argument must be a Q-Expression.");
-	LASSERT(args, args->cell[0]->count != 0, "Invalid argument: passed empty Q-Expression.");
+	LASSERT_NUM_ARGS("tail", args, 1);
+	LASSERT_TYPE("tail", args, 0, LVAL_QEXPR);
+	LASSERT_NOT_EMPTY("tail", args, 0);
 
 	lval* tail = lval_take(args, 0);
 	lval_del(lval_pop(tail, 0));
@@ -451,8 +485,8 @@ lval* builtin_list(lenv* e, lval* args) {
 }
 
 lval* builtin_eval(lenv* e, lval* args) {
-	LASSERT(args, args->count == 1, "Invalid arguments number");
-	LASSERT(args, args->cell[1] == LVAL_QEXPR, "The argument must be a Q-Expression.");
+	LASSERT_NUM_ARGS("eval", args, 1);
+	LASSERT_TYPE("eval", args, 0, LVAL_QEXPR);
 
 	lval* x = lval_take(args, 0);
 	x->type = LVAL_SEXPR;
@@ -470,7 +504,7 @@ lval* lval_join(lval* first, lval* second) {
 
 lval* builtin_join(lenv* e, lval* v) {
 	for (int i = 0; i < v->count; ++i) {
-		LASSERT(v, v->cell[i]->type == LVAL_QEXPR, "All the arguments must be Q-Expressions.");
+		LASSERT_TYPE("join", v, 0, LVAL_QEXPR);
 	}
 
 	lval* res = lval_pop(v, 0);
@@ -483,18 +517,19 @@ lval* builtin_join(lenv* e, lval* v) {
 }
 
 lval* builtin_def(lenv* e, lval* args) {
-	LASSERT(args, (args->cell[0]->type == LVAL_QEXPR),
-			"First argument must be a Q-Expression.");
+	LASSERT_TYPE("def", args, 0, LVAL_QEXPR);
 
 	lval* syms = args->cell[0];
 
 	for (int i = 0; i < syms->count; ++i) {
-		LASSERT(args, (syms->cell[i]->type == LVAL_SYM),
-				"Function 'def' cannot define non-symbols.");
+		LASSERT(args, syms->cell[i]->type == LVAL_SYM,
+				"Function 'def' cannot define non-symbols. Got %s, expected %s.",
+				ltype_name(syms->cell[i]->type), ltype_name(LVAL_SYM));
 	}
 
-	LASSERT(args, (syms->count == args->count - 1),
-			"Number of the values must be the same as the number of symbols.");
+	LASSERT(args, syms->count == args->count-1,
+			"Function 'def' passed too many arguments for symbols. Got %i, expected %i.",
+			syms->count, args->count-1)
 
 	for (int i = 0; i < syms->count; ++i) {
 		lenv_put(e, syms->cell[i], args->cell[i+1]);
@@ -506,10 +541,7 @@ lval* builtin_def(lenv* e, lval* args) {
 
 lval* builtin_op(lenv* e, lval* args, char* op) {
 	for (int i = 0; i < args->count; ++i) {
-		if (args->cell[i]->type != LVAL_NUM) {
-			lval_del(args);
-			return lval_err("Cannot operate on non-numbers.");
-		}
+		LASSERT_TYPE(op, args, i, LVAL_NUM);
 	}
 
 	lval* first = lval_pop(args, 0);
