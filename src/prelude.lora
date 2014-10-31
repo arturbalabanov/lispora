@@ -1,0 +1,23 @@
+; Atoms
+(def {null} {})
+(def {true} 1)
+(def {false} 0)
+
+; Function declaration
+(def {defn} (\ {func body} {
+	def (head func) (\ (tail func) body)
+}))
+
+;; Standard functions
+
+(defn {unpack func lst} {
+	;-> unpack + {1 2 3}
+	;-< 6
+	eval (join (list func) lst)
+})
+
+(defn {pack func & xs} {
+	;-> pack tail 1 2 3
+	;-< {2 3}
+	func xs
+})
